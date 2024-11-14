@@ -1,7 +1,7 @@
 import requests
 import matplotlib.pyplot as plt
 
-# 1616
+# 1616 1622
 referer = 'https://results.vertical-life.info/event/110/cr/650'
 
 comp = 649
@@ -23,10 +23,22 @@ def get_tops_for(comp_id, athlete_id):
     for ascent in athlete_data['ascents']:
         if ascent['top']:  # Only count routes where 'top' is True
             tops.add(ascent['route_name'])
+
     return tops
 
 
-def find_athlete_ids_by_name(name, comp_id):
+def get_tops_as_list_for(comp_id, athlete_id):
+    topped = [0] * 100
+    url = f"https://results.vertical-life.info/api/v1/category_rounds/{comp_id}/athlete_details/{athlete_id}"
+    response = requests.get(url, headers={"Referer": referer})
+    athlete_data = response.json()
+    for ascent in athlete_data['ascents']:
+        if ascent['top']:
+            topped[int(ascent['route_name']) - 1] = 1
+    return topped
+
+
+def find_athlete_ids_by_name(comp_id, name):
     url = f"https://results.vertical-life.info/api/v1/category_rounds/{comp_id}/results"
     response = requests.get(url, headers={"Referer": referer})
     comp_data = response.json()
@@ -41,7 +53,7 @@ def find_athlete_ids_by_name(name, comp_id):
     return matching_ids
 
 
-def find_exclusive_tops(first_id, second_id, comp_id1, comp_id2):
+def find_exclusive_tops(comp_id1, first_id, comp_id2, second_id):
     first_tops = get_tops_for(comp_id1, first_id)
     second_tops = get_tops_for(comp_id2, second_id)
 
@@ -50,13 +62,59 @@ def find_exclusive_tops(first_id, second_id, comp_id1, comp_id2):
     return
 
 
-def compare(name1, name2):
-    id1 = find_athlete_ids_by_name(name1, 649)[0]
-    id2 = find_athlete_ids_by_name(name2, 649)[0]
-    find_exclusive_tops(id1, id2, 650, 649)
+def compare(comp_id1, name1, comp_id2, name2):
+    id1 = find_athlete_ids_by_name(comp_id1, name1)[0]
+    id2 = find_athlete_ids_by_name(comp_id2, name2)[0]
+    find_exclusive_tops(comp_id1, id1, comp_id2, id2)
 
 
-#compare('arnold', 'kösling')
+def get_top_ten(comp_id):
+    participants = get_athletes_for(comp_id)
+    all_tops = []
+    for athlete_id in participants[:10]:
+        all_tops.append(get_tops_as_list_for(comp_id, athlete_id))
+    return all_tops
+
+
+def find_decisive_boulders(comp_id):
+    non_matching_indexes = []
+
+    tops = get_top_ten(comp_id)
+    for i in range(len(tops[0])):
+        # Check if any list has a different value at index i
+        first_value = tops[0][i]
+        if not all(sublist[i] == first_value for sublist in tops):
+            non_matching_indexes.append(i)
+
+    print("Indexes with non-matching values across lists:", non_matching_indexes)
+
+    # Number of bars
+    num_bars = len(non_matching_indexes)
+
+    # X positions for each bar
+    bar_positions = [str(x + 1) for x in non_matching_indexes]
+
+    # Initialize the bottom positions to zero for each bar
+    bottoms = [0] * num_bars
+
+    # Plot each segment as a separate layer on each bar
+    for index, segment in enumerate(tops):
+        segment = [segment[i] for i in non_matching_indexes]
+        plt.bar(bar_positions, segment, bottom=bottoms)
+
+        # Update the bottom for the next segment to stack on top
+        bottoms = [bottom + height for bottom, height in zip(bottoms, segment)]
+
+    # Labeling and displaying the plot
+    plt.xlabel("Boulder")
+    plt.xticks(rotation=90)
+    plt.title("decisive boulders")
+    plt.savefig("/home/sfk/wintercup/decisive_boulders.png")
+
+
+find_decisive_boulders(comp)
+
+# compare(650, 'jenny', 649, 'kösling')
 
 route_counts = {}
 top_counts = [0] * 71
